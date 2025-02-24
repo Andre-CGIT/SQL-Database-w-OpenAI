@@ -1,0 +1,240 @@
+import sys
+
+import openai
+
+import pandas as pd
+
+import matplotlib.pyplot as plt
+
+import seaborn as sns
+
+from sqlalchemy import create_engine
+
+from sqlalchemy.exc import SQLAlchemyError
+
+from PyQt5.QtWidgets import QApplication, QWidget, QVBoxLayout, QLineEdit, QPushButton, QTextEdit, QLabel
+
+from PyQt5.QtGui import QIcon
+
+# Set up OpenAI API (replace with your OpenAI API key)
+
+openai.api_key = 'ADD KEY HERE'  # OpenAI API key
+
+# Database connection setup (SQLite example, replace with your actual database URL)
+
+engine = create_engine('sqlite:///your_database.db')  # Replace with your actual database URL
+
+connection = engine.connect()
+
+
+# AI Agent for Query Conversion
+
+def query_to_sql_agent(question):
+    """
+
+    Uses GPT to convert a natural language question into a SQL query.
+
+    """
+
+    try:
+
+        response = openai.Completion.create(
+
+            engine="text-davinci-003",  # You can use other engines as well
+
+            prompt=f"Convert the following question into a SQL query: {question}",
+
+            max_tokens=100
+
+        )
+
+        sql_query = response.choices[0].text.strip()
+
+        return sql_query
+
+    except Exception as e:
+
+        print(f"Error in AI agent: {e}")
+
+        return None
+
+
+# Execute SQL Query and Fetch Data
+
+def execute_sql_query(sql_query):
+    """
+
+    Executes a given SQL query and returns the result as a DataFrame.
+
+    """
+
+    try:
+
+        result = pd.read_sql(sql_query, connection)
+
+        return result
+
+    except SQLAlchemyError as e:
+
+        print(f"Error executing SQL query: {e}")
+
+        return None
+
+
+# Visualize Data (Simple Bar Chart)
+
+def visualize_data(data, x_column, y_column, title):
+    """
+
+    Visualizes data as a bar chart.
+
+    """
+
+    try:
+
+        plt.figure(figsize=(10, 6))
+
+        sns.barplot(x=x_column, y=y_column, data=data)
+
+        plt.title(title)
+
+        plt.xticks(rotation=45)
+
+        plt.tight_layout()
+
+        plt.show()
+
+    except Exception as e:
+
+        print(f"Error visualizing data: {e}")
+
+
+# GUI Application Class
+
+class AIQueryApp(QWidget):
+
+    def __init__(self):
+
+        super().__init__()
+
+        self.init_ui()
+
+    def init_ui(self):
+
+        self.setWindowTitle('AI SQL Query Agent')
+
+        self.setGeometry(100, 100, 600, 400)
+
+        self.setWindowIcon(QIcon('icon.png'))  # Optional: Add an icon (provide path to icon file)
+
+        # Layout and widgets
+
+        layout = QVBoxLayout()
+
+        # Text Input for the query
+
+        self.query_input = QLineEdit(self)
+
+        self.query_input.setPlaceholderText('Enter your question...')
+
+        layout.addWidget(self.query_input)
+
+        # Button to run the query
+
+        self.query_button = QPushButton('Ask AI', self)
+
+        self.query_button.clicked.connect(self.run_query)
+
+        layout.addWidget(self.query_button)
+
+        # Label to show SQL query and data
+
+        self.query_label = QLabel(self)
+
+        layout.addWidget(self.query_label)
+
+        # Text area to display the result
+
+        self.result_output = QTextEdit(self)
+
+        self.result_output.setReadOnly(True)
+
+        layout.addWidget(self.result_output)
+
+        self.setLayout(layout)
+
+    def run_query(self):
+
+        question = self.query_input.text()
+
+        if question:
+
+            # Convert question to SQL query
+
+            sql_query = query_to_sql_agent(question)
+
+            if sql_query:
+
+                self.query_label.setText(f"Generated SQL Query: {sql_query}")
+
+                # Execute SQL query
+
+                data = execute_sql_query(sql_query)
+
+                if data is not None and not data.empty:
+
+                    # Show results in text output area
+
+                    self.result_output.setPlainText(data.head().to_string())
+
+                    # Ask user for columns to visualize
+
+                    x_column, y_column = self.ask_for_columns(data)
+
+                    if x_column and y_column:
+                        visualize_data(data, x_column, y_column, f"Visualization of {y_column} vs {x_column}")
+
+                else:
+
+                    self.result_output.setPlainText("No data found for this query.")
+
+            else:
+
+                self.result_output.setPlainText("Failed to generate SQL query.")
+
+        else:
+
+            self.result_output.setPlainText("Please enter a valid question.")
+
+    def ask_for_columns(self, data):
+
+        """
+
+        Asks the user to input columns for X and Y axes to visualize.
+
+        """
+
+        columns = list(data.columns)
+
+        x_column = columns[0]  # Default to first column
+
+        y_column = columns[1]  # Default to second column
+
+        return x_column, y_column
+
+
+# Main function to run the GUI
+
+def main():
+    app = QApplication(sys.argv)
+
+    window = AIQueryApp()
+
+    window.show()
+
+    sys.exit(app.exec_())
+
+
+if __name__ == '__main__':
+    main()
+
